@@ -5,7 +5,6 @@ void main() {
   runApp(const PressureRiseApp());
 }
 
-// Globális lista a mentett hőcserélők tárolásához a memóriában
 List<Map<String, dynamic>> savedHeatExchangers = [];
 
 class PressureRiseApp extends StatelessWidget {
@@ -110,7 +109,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // -------------------------------------------------------------
-// 1. FÜL: ELŐKALKULÁCIÓ
+// 1. FÜL: ELŐKALKULÁCIÓ (3 MÓDDAL: KÖZEG / ADOTT IDŐ / HIBAMÉRET ALAPJÁN)
 // -------------------------------------------------------------
 class CalcScreen extends StatefulWidget {
   const CalcScreen({super.key});
@@ -125,18 +124,19 @@ class _CalcScreenState extends State<CalcScreen> {
   final _volCtrl = TextEditingController();
   final _vacCtrl = TextEditingController();
   final _timeCtrl = TextEditingController();
+  final _defectSizeCtrl = TextEditingController();
 
   String? _selectedMedium;
   String? _selectedGauge;
-  bool _isTimeMode = true;
+  String _calcMode = 'time_by_medium'; // 'time_by_medium', 'defect_by_time', 'time_by_defect'
 
   Map<String, dynamic>? _calcResult;
   final double pAtm = 1013.25;
 
   double _getMediumRate(String med) {
-    if (med == 'Steam') return 0.001;        // Leybold Vapor-tight: < 1e-3
-    if (med == 'Oil') return 0.00001;        // Leybold Oil-tight: < 1e-5
-    return 0.01;                             // Leybold Water-tight: < 1e-2
+    if (med == 'Steam') return 0.001;
+    if (med == 'Oil') return 0.00001;
+    return 0.01;
   }
 
   String _getMediumLabel(String med) {
@@ -165,7 +165,7 @@ class _CalcScreenState extends State<CalcScreen> {
       return;
     }
     if (_selectedMedium == null) {
-      _showError('Válasszon köpeny oldali közeget!');
+      _showError('Válasszon közeget!');
       return;
     }
     if (_selectedGauge == null) {
@@ -180,8 +180,6 @@ class _CalcScreenState extends State<CalcScreen> {
     double driving = (pAtm - vac) / pAtm;
     if (driving <= 0.01) driving = 0.01;
 
-    final qLReq = _getMediumRate(_selectedMedium!);
-    final qLEffective = qLReq * driving;
     final dp = _getGaugeDp(_selectedGauge!);
     final medLabel = _getMediumLabel(_selectedMedium!);
 
@@ -189,7 +187,9 @@ class _CalcScreenState extends State<CalcScreen> {
     if (v > 10000) incHours = 4.0;
     if (v > 25000) incHours = 6.0;
 
-    if (_isTimeMode) {
+    if (_calcMode == 'time_by_medium') {
+      final qLReq = _getMediumRate(_selectedMedium!);
+      final qLEffective = qLReq * driving;
       final tSec = (v * dp) / qLEffective;
       final tHours = tSec / 3600.0;
       final tDays = tSec / 86400.0;
@@ -205,13 +205,13 @@ class _CalcScreenState extends State<CalcScreen> {
         _calcResult = {
           'highlight': '${tHours.toStringAsFixed(1)} óra (${tDays.toStringAsFixed(1)} nap)',
           'details': 'Létrehozott vákuum: $vac mbar (Hajtóerő: ${(driving * 100).toStringAsFixed(1)}%)\n'
-              'Műszer küszöb: $dp mbar\nEnnyi idő szükséges a $medLabel igazolásához.',
+              'Műszer küszöb: $dp mbar\nEnnyi idő kell a $medLabel igazolásához.',
           'incubation': incHours,
           'suggestion': optText,
           'summary': '${tHours.toStringAsFixed(1)} óra szükséges',
         };
       });
-    } else {
+    } else if (_calcMode == 'defect_by_time') {
       final hours = double.tryParse(_timeCtrl.text.trim());
       if (hours == null || hours <= 0) {
         _showError('Adja meg a tervezett vizsgálati időt!');
@@ -229,6 +229,37 @@ class _CalcScreenState extends State<CalcScreen> {
           'incubation': incHours,
           'suggestion': null,
           'summary': 'Max. ~${dMm.toStringAsFixed(3)} mm hiba (${hours}h)',
+        };
+      });
+    } else {
+      // time_by_defect
+      final targetD = double.tryParse(_defectSizeCtrl.text.trim());
+      if (targetD == null || targetD <= 0) {
+        _showError('Adja meg az elvárt hibaméretet [mm] (pl. 0.05)!');
+        return;
+      }
+      final qLTarget = 0.133 * pow(targetD / 0.1, 2);
+      final qLEffective = qLTarget * driving;
+      final tSec = (v * dp) / qLEffective;
+      final tHours = tSec / 3600.0;
+      final tDays = tSec / 86400.0;
+
+      String? optText;
+      if (_selectedGauge!.startsWith('Wika')) {
+        final tPfSec = (v * 0.1) / qLEffective;
+        optText = 'Pfeiffer műszerrel (Δp=0.1 mbar) ez az idő lecsökkenthető: '
+            '${(tPfSec / 3600).toStringAsFixed(1)} órára (${(tPfSec / 86400).toStringAsFixed(1)} nap)!';
+      }
+
+      setState(() {
+        _calcResult = {
+          'highlight': '${tHours.toStringAsFixed(1)} óra (${tDays.toStringAsFixed(1)} nap)',
+          'details': 'Elvárt kimutatandó hiba: Ø $targetD mm\n'
+              'Ekvivalens ráta: ${qLTarget.toStringAsFixed(5)} mbar·l/s\n'
+              'Műszer küszöb: $dp mbar\nEnnyi idő kell a hiba biztos kimutatásához.',
+          'incubation': incHours,
+          'suggestion': optText,
+          'summary': '${tHours.toStringAsFixed(1)}h (Ø ${targetD}mm)',
         };
       });
     }
@@ -257,6 +288,7 @@ class _CalcScreenState extends State<CalcScreen> {
       _volCtrl.clear();
       _vacCtrl.clear();
       _timeCtrl.clear();
+      _defectSizeCtrl.clear();
       _selectedMedium = null;
       _selectedGauge = null;
       _calcResult = null;
@@ -315,11 +347,11 @@ class _CalcScreenState extends State<CalcScreen> {
                   decoration: const InputDecoration(labelText: 'Köpeny oldali közeg *', border: OutlineInputBorder()),
                   value: _selectedMedium,
                   items: const [
-                    DropdownMenuItem(value: 'Steam', child: Text('Steam | Vapor-tight (10⁻³ mbar·l/s)')),
-                    DropdownMenuItem(value: 'Water', child: Text('Water | Water-tight (10⁻² mbar·l/s)')),
-                    DropdownMenuItem(value: 'Glycol', child: Text('Glycol | Water-tight (10⁻² mbar·l/s)')),
-                    DropdownMenuItem(value: 'CHW', child: Text('CHW | Water-tight (10⁻² mbar·l/s)')),
-                    DropdownMenuItem(value: 'Oil', child: Text('Oil | Oil-tight (10⁻⁵ mbar·l/s)')),
+                    DropdownMenuItem(value: 'Steam', child: Text('Steam | Vapor-tight (10⁻³)')),
+                    DropdownMenuItem(value: 'Water', child: Text('Water | Water-tight (10⁻²)')),
+                    DropdownMenuItem(value: 'Glycol', child: Text('Glycol | Water-tight (10⁻²)')),
+                    DropdownMenuItem(value: 'CHW', child: Text('CHW | Water-tight (10⁻²)')),
+                    DropdownMenuItem(value: 'Oil', child: Text('Oil | Oil-tight (10⁻⁵)')),
                   ],
                   onChanged: (v) => setState(() => _selectedMedium = v),
                 ),
@@ -344,13 +376,14 @@ class _CalcScreenState extends State<CalcScreen> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                SegmentedButton<bool>(
+                SegmentedButton<String>(
                   segments: const [
-                    ButtonSegment(value: true, label: Text('Szükséges idő')),
-                    ButtonSegment(value: false, label: Text('Adott idő alatti hiba')),
+                    ButtonSegment(value: 'time_by_medium', label: Text('Közeg')),
+                    ButtonSegment(value: 'defect_by_time', label: Text('Idő hiba')),
+                    ButtonSegment(value: 'time_by_defect', label: Text('Hibaméret')),
                   ],
-                  selected: {_isTimeMode},
-                  onSelectionChanged: (set) => setState(() => _isTimeMode = set.first),
+                  selected: {_calcMode},
+                  onSelectionChanged: (set) => setState(() => _calcMode = set.first),
                 ),
                 const SizedBox(height: 14),
                 TextField(
@@ -358,12 +391,20 @@ class _CalcScreenState extends State<CalcScreen> {
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Vákuum mértéke [mbar] *', border: OutlineInputBorder()),
                 ),
-                if (!_isTimeMode) ...[
+                if (_calcMode == 'defect_by_time') ...[
                   const SizedBox(height: 12),
                   TextField(
                     controller: _timeCtrl,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(labelText: 'Vizsgálati idő [óra] *', border: OutlineInputBorder()),
+                  ),
+                ],
+                if (_calcMode == 'time_by_defect') ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _defectSizeCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Elvárt hibaméret [mm] *', hintText: 'pl. 0.05', border: OutlineInputBorder()),
                   ),
                 ],
                 const SizedBox(height: 14),
@@ -503,7 +544,6 @@ class _MeasureScreenState extends State<MeasureScreen> {
     final t1 = t1Raw + 273.15;
     final t2 = t2Raw + 273.15;
 
-    // Gay-Lussac korrekció
     final p2Corrected = p2 * (t1 / t2);
     final dpEffective = max(0.0, p2Corrected - p1);
 
