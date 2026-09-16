@@ -1,11 +1,12 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const PressureRiseApp());
 }
-
-List<Map<String, dynamic>> savedHeatExchangers = [];
 
 class PressureRiseApp extends StatelessWidget {
   const PressureRiseApp({super.key});
@@ -13,7 +14,7 @@ class PressureRiseApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Pressure Rise Test Calculator',
+      title: 'Pressure Rise Calculator',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -42,6 +43,29 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String _measPos = "";
   double? _measVolume;
   String? _measGauge;
+
+  final GlobalKey<_SavedListScreenState> _savedListKey = GlobalKey<_SavedListScreenState>();
+  final GlobalKey<_MeasureScreenState> _measureScreenKey = GlobalKey<_MeasureScreenState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkActiveMeasurement();
+  }
+
+  Future<void> _checkActiveMeasurement() async {
+    final prefs = await SharedPreferences.getInstance();
+    final activeData = prefs.getString('active_measurement');
+    if (activeData != null) {
+      final decoded = jsonDecode(activeData);
+      setState(() {
+        _measPos = decoded['pos'] ?? '';
+        _measVolume = (decoded['volume'] as num?)?.toDouble();
+        _measGauge = decoded['gauge'];
+        _isMeasureTabVisible = true;
+      });
+    }
+  }
 
   void _openMeasureTab(String pos, double volume, String gauge) {
     setState(() {
@@ -85,10 +109,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          const CalcScreen(),
-          SavedListScreen(onMeasureRequested: _openMeasureTab),
+          CalcScreen(onSaved: () => _savedListKey.currentState?.reload()),
+          SavedListScreen(key: _savedListKey, onMeasureRequested: _openMeasureTab),
           if (_isMeasureTabVisible)
             MeasureScreen(
+              key: _measureScreenKey,
               pos: _measPos,
               volume: _measVolume,
               gauge: _measGauge,
@@ -100,7 +125,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          setState(() => _currentIndex = index);
+          if (index == 1) {
+            _savedListKey.currentState?.reload();
+          }
+        },
         selectedItemColor: const Color(0xFF1565C0),
         items: navItems,
       ),
@@ -109,10 +139,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // -------------------------------------------------------------
-// 1. FÜL: ELŐKALKULÁCIÓ (3 MÓDDAL: KÖZEG / ADOTT IDŐ / HIBAMÉRET ALAPJÁN)
+// 1. FÜL: ELŐKALKULÁCIÓ (PERZISZTENS TÁROLÁSSAL)
 // -------------------------------------------------------------
 class CalcScreen extends StatefulWidget {
-  const CalcScreen({super.key});
+  final VoidCallback onSaved;
+  const CalcScreen({super.key, required this.onSaved});
 
   @override
   State<CalcScreen> createState() => _CalcScreenState();
@@ -128,7 +159,7 @@ class _CalcScreenState extends State<CalcScreen> {
 
   String? _selectedMedium;
   String? _selectedGauge;
-  String _calcMode = 'time_by_medium'; // 'time_by_medium', 'defect_by_time', 'time_by_defect'
+  String _calcMode = 'time_by_medium';
 
   Map<String, dynamic>? _calcResult;
   final double pAtm = 1013.25;
@@ -232,7 +263,6 @@ class _CalcScreenState extends State<CalcScreen> {
         };
       });
     } else {
-      // time_by_defect
       final targetD = double.tryParse(_defectSizeCtrl.text.trim());
       if (targetD == null || targetD <= 0) {
         _showError('Adja meg az elvárt hibaméretet [mm] (pl. 0.05)!');
@@ -265,14 +295,18 @@ class _CalcScreenState extends State<CalcScreen> {
     }
   }
 
-  void _saveRecord() {
+  Future<void> _saveRecord() async {
     if (_calcResult == null) return;
 
     final pos = _posCtrl.text.trim();
     final sn = _snCtrl.text.trim().isEmpty ? 'N/A' : _snCtrl.text.trim();
     final v = double.parse(_volCtrl.text.trim());
 
-    savedHeatExchangers.add({
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('saved_hx_list') ?? '[]';
+    final List<dynamic> list = jsonDecode(raw);
+
+    list.add({
       'pos': pos,
       'sn': sn,
       'v': v,
@@ -281,6 +315,9 @@ class _CalcScreenState extends State<CalcScreen> {
       'res': _calcResult!['summary'],
       'date': DateTime.now().toString().substring(0, 10),
     });
+
+    await prefs.setString('saved_hx_list', jsonEncode(list));
+    widget.onSaved();
 
     setState(() {
       _posCtrl.clear();
@@ -294,12 +331,14 @@ class _CalcScreenState extends State<CalcScreen> {
       _calcResult = null;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('A(z) "$pos" pozíciójú hőcserélő sikeresen elmentve!'),
-        backgroundColor: Colors.green,
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('A(z) "$pos" pozíciójú hőcserélő elmentve a telefonra!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
   }
 
   void _showError(String msg) {
@@ -457,7 +496,7 @@ class _CalcScreenState extends State<CalcScreen> {
                       style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF1565C0)),
                       onPressed: _saveRecord,
                       icon: const Icon(Icons.save),
-                      label: const Text('Hőcserélő mentése (Adatok nullázása)'),
+                      label: const Text('Hőcserélő mentése a telefonra'),
                     ),
                   )
                 ],
@@ -471,7 +510,7 @@ class _CalcScreenState extends State<CalcScreen> {
 }
 
 // -------------------------------------------------------------
-// 2. FÜL: MÉRÉS VÉGZÉSE
+// 2. FÜL: MÉRÉS VÉGZÉSE (RÉSZLEGES / FOLYAMATOS MENTÉSSEL)
 // -------------------------------------------------------------
 class MeasureScreen extends StatefulWidget {
   final String pos;
@@ -499,6 +538,28 @@ class _MeasureScreenState extends State<MeasureScreen> {
   @override
   void initState() {
     super.initState();
+    _loadOrCreateActiveMeasurement();
+  }
+
+  Future<void> _loadOrCreateActiveMeasurement() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedJson = prefs.getString('active_measurement');
+
+    if (savedJson != null) {
+      final data = jsonDecode(savedJson);
+      if (data['pos'] == widget.pos) {
+        _durCtrl.text = data['duration'] ?? '24';
+        final List<dynamic> rows = data['rows'] ?? [];
+        setState(() {
+          _grid = rows.map((r) => {
+            'label': r['label'],
+            'p': TextEditingController(text: r['p']),
+            't': TextEditingController(text: r['t']),
+          }).toList();
+        });
+        return;
+      }
+    }
     _generateGrid();
   }
 
@@ -521,18 +582,85 @@ class _MeasureScreenState extends State<MeasureScreen> {
       };
     });
     setState(() => _evalResult = null);
+    _saveProgressQuietly();
+  }
+
+  Future<void> _saveProgressQuietly() async {
+    final prefs = await SharedPreferences.getInstance();
+    final rowsData = _grid.map((r) => {
+      'label': r['label'],
+      'p': r['p'].text,
+      't': r['t'].text,
+    }).toList();
+
+    await prefs.setString('active_measurement', jsonEncode({
+      'pos': widget.pos,
+      'volume': widget.volume,
+      'gauge': widget.gauge,
+      'duration': _durCtrl.text.trim(),
+      'rows': rowsData,
+    }));
+  }
+
+  Future<void> saveMeasurementProgress() async {
+    await _saveProgressQuietly();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Aktuális pontok és értékek mentve! Kilépés után sem veszik el.'),
+          backgroundColor: Colors.blue,
+        ),
+      );
+    }
+  }
+
+  Future<void> _resetMeasurement() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('active_measurement');
+    _generateGrid();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mérési adatok nullázva!')),
+      );
+    }
   }
 
   void _evaluate() {
-    if (_grid.length < 2) return;
-    final p1 = double.tryParse(_grid.first['p'].text);
-    final t1Raw = double.tryParse(_grid.first['t'].text);
-    final p2 = double.tryParse(_grid.last['p'].text);
-    final t2Raw = double.tryParse(_grid.last['t'].text);
+    _saveProgressQuietly();
+
+    // Keresd meg a legelső kitöltött sort
+    Map<String, dynamic>? firstFilled;
+    for (var r in _grid) {
+      if (r['p'].text.isNotEmpty && r['t'].text.isNotEmpty) {
+        firstFilled = r;
+        break;
+      }
+    }
+
+    // Keresd meg a legutolsó kitöltött sort
+    Map<String, dynamic>? lastFilled;
+    for (var r in _grid.reversed) {
+      if (r['p'].text.isNotEmpty && r['t'].text.isNotEmpty) {
+        lastFilled = r;
+        break;
+      }
+    }
+
+    if (firstFilled == null || lastFilled == null || firstFilled == lastFilled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Legalább 2 kitöltött mérési pont szükséges a trendhez!')),
+      );
+      return;
+    }
+
+    final p1 = double.tryParse(firstFilled['p'].text);
+    final t1Raw = double.tryParse(firstFilled['t'].text);
+    final p2 = double.tryParse(lastFilled['p'].text);
+    final t2Raw = double.tryParse(lastFilled['t'].text);
 
     if (p1 == null || p2 == null || t1Raw == null || t2Raw == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('A kezdő (0h) és a záró pont p és T értékét kötelező kitölteni!')),
+        const SnackBar(content: Text('Érvénytelen számformátum a beírt pontoknál!')),
       );
       return;
     }
@@ -561,6 +689,7 @@ class _MeasureScreenState extends State<MeasureScreen> {
         'dpEff': dpEffective.toStringAsFixed(2),
         'dpRaw': (p2 - p1).toStringAsFixed(2),
         'dpThermal': (dpThermal > 0 ? '+$dpThermal' : dpThermal.toStringAsFixed(2)),
+        'range': '${firstFilled!['label']} ➔ ${lastFilled!['label']}',
       };
     });
   }
@@ -573,7 +702,12 @@ class _MeasureScreenState extends State<MeasureScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Hőcserélő: ${widget.pos}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Expanded(child: Text('Hőcserélő: ${widget.pos}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+            IconButton(
+              tooltip: 'Mérés nullázása',
+              icon: const Icon(Icons.refresh, color: Colors.orange),
+              onPressed: _resetMeasurement,
+            ),
             TextButton.icon(
               onPressed: widget.onClose,
               icon: const Icon(Icons.close, color: Colors.red),
@@ -606,8 +740,19 @@ class _MeasureScreenState extends State<MeasureScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Mérési napló (${_grid.length} pont)', style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Mérési napló (${_grid.length} pont)', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white),
+                      onPressed: saveMeasurementProgress,
+                      icon: const Icon(Icons.save_as, size: 16),
+                      label: const Text('Részleges mentés', style: TextStyle(fontSize: 12)),
+                    )
+                  ],
+                ),
+                const SizedBox(height: 12),
                 ..._grid.map((row) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Row(
@@ -616,7 +761,8 @@ class _MeasureScreenState extends State<MeasureScreen> {
                           Expanded(
                             child: TextField(
                               controller: row['p'],
-                              keyboardType: TextInputType.number,
+                              onChanged: (_) => _saveProgressQuietly(),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
                               decoration: const InputDecoration(hintText: 'p [mbar]', isDense: true, border: OutlineInputBorder()),
                             ),
                           ),
@@ -624,7 +770,8 @@ class _MeasureScreenState extends State<MeasureScreen> {
                           Expanded(
                             child: TextField(
                               controller: row['t'],
-                              keyboardType: TextInputType.number,
+                              onChanged: (_) => _saveProgressQuietly(),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
                               decoration: const InputDecoration(hintText: 'T [°C]', isDense: true, border: OutlineInputBorder()),
                             ),
                           ),
@@ -654,6 +801,8 @@ class _MeasureScreenState extends State<MeasureScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text('Mért tartomány: ${_evalResult!['range']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
                   Text('Mért qL: ${_evalResult!['qL']} mbar·l/s',
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20))),
                   const SizedBox(height: 6),
@@ -671,7 +820,7 @@ class _MeasureScreenState extends State<MeasureScreen> {
 }
 
 // -------------------------------------------------------------
-// 3. FÜL: MENTETT HŐCSERÉLŐK
+// 3. FÜL: MENTETT HŐCSERÉLŐK (FLASHRŐL BETÖLTVE)
 // -------------------------------------------------------------
 class SavedListScreen extends StatefulWidget {
   final Function(String pos, double v, String gauge) onMeasureRequested;
@@ -683,22 +832,39 @@ class SavedListScreen extends StatefulWidget {
 }
 
 class _SavedListScreenState extends State<SavedListScreen> {
-  void _delete(int index) {
+  List<dynamic> _items = [];
+
+  @override
+  void initState() {
+    super.initState();
+    reload();
+  }
+
+  Future<void> reload() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('saved_hx_list') ?? '[]';
     setState(() {
-      savedHeatExchangers.removeAt(index);
+      _items = jsonDecode(raw);
     });
+  }
+
+  Future<void> _delete(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    _items.removeAt(index);
+    await prefs.setString('saved_hx_list', jsonEncode(_items));
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    if (savedHeatExchangers.isEmpty) {
-      return const Center(child: Text('Nincsenek mentett hőcserélők.'));
+    if (_items.isEmpty) {
+      return const Center(child: Text('Nincsenek mentett hőcserélők a telefonon.'));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(14),
-      itemCount: savedHeatExchangers.length,
+      itemCount: _items.length,
       itemBuilder: (context, i) {
-        final it = savedHeatExchangers[i];
+        final it = _items[i];
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
           child: ListTile(
@@ -710,8 +876,8 @@ class _SavedListScreenState extends State<SavedListScreen> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.play_arrow, color: Colors.green),
-                  tooltip: 'Méréshez betöltés',
-                  onPressed: () => widget.onMeasureRequested(it['pos'], it['v'].toDouble(), it['gauge']),
+                  tooltip: 'Mérés betöltése',
+                  onPressed: () => widget.onMeasureRequested(it['pos'], (it['v'] as num).toDouble(), it['gauge']),
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete, color: Colors.red),
