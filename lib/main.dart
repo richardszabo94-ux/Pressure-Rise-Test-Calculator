@@ -139,7 +139,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // -------------------------------------------------------------
-// 1. FÜL: ELŐKALKULÁCIÓ
+// 1. FÜL: ELŐKALKULÁCIÓ (3 MÓD: KÖZEG / ADOTT IDŐ / HIBAMÉRET)
 // -------------------------------------------------------------
 class CalcScreen extends StatefulWidget {
   final VoidCallback onSaved;
@@ -510,7 +510,7 @@ class _CalcScreenState extends State<CalcScreen> {
 }
 
 // -------------------------------------------------------------
-// 2. FÜL: MÉRÉS VÉGZÉSE (PONTOS KEZDÉSI/BEFEJEZÉSI IDŐVEL ÉS MINTAVÉTELI ÓRÁKKAL)
+// 2. FÜL: MÉRÉS VÉGZÉSE (TÚLCSORDULÁSMENTES ÉS RUGALMAS ILLESZTÉSSEL)
 // -------------------------------------------------------------
 class MeasureScreen extends StatefulWidget {
   final String pos;
@@ -591,7 +591,6 @@ class _MeasureScreenState extends State<MeasureScreen> {
 
       final targetDate = _startTime.add(Duration(minutes: (currentH * 60).round()));
       final timeStr = _formatDateTime(targetDate);
-
       String stage = i == 0 ? 'Kezdet' : (i == count - 1 ? 'Záró' : '${currentH}h');
 
       return {
@@ -672,7 +671,7 @@ class _MeasureScreenState extends State<MeasureScreen> {
     _generateGrid();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mérési adatok és időpontok alaphelyzetbe állítva!')),
+        const SnackBar(content: Text('Mérési adatok alaphelyzetbe állítva!')),
       );
     }
   }
@@ -750,37 +749,42 @@ class _MeasureScreenState extends State<MeasureScreen> {
     final endTime = _startTime.add(Duration(minutes: (hours * 60).round()));
 
     return ListView(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(child: Text('Hőcserélő: ${widget.pos}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+            Expanded(
+              child: Text(
+                'Hőcserélő: ${widget.pos}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             IconButton(
               tooltip: 'Mérés nullázása',
               icon: const Icon(Icons.refresh, color: Colors.orange),
               onPressed: _resetMeasurement,
             ),
-            TextButton.icon(
-              onPressed: widget.onClose,
+            IconButton(
+              tooltip: 'Bezárás',
               icon: const Icon(Icons.close, color: Colors.red),
-              label: const Text('Bezárás', style: TextStyle(color: Colors.red)),
+              onPressed: widget.onClose,
             ),
           ],
         ),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Mérési időkeret és ütemezés', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF1F5F9),
                           borderRadius: BorderRadius.circular(8),
@@ -789,8 +793,8 @@ class _MeasureScreenState extends State<MeasureScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Kezdés:', style: TextStyle(fontSize: 11, color: Colors.black54)),
-                            Text(_formatDateTime(_startTime), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                            const Text('Kezdés:', style: TextStyle(fontSize: 10, color: Colors.black54)),
+                            Text(_formatDateTime(_startTime), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                           ],
                         ),
                       ),
@@ -798,7 +802,7 @@ class _MeasureScreenState extends State<MeasureScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Container(
-                        padding: const EdgeInsets.all(10),
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: const Color(0xFFE8F5E9),
                           borderRadius: BorderRadius.circular(8),
@@ -807,38 +811,39 @@ class _MeasureScreenState extends State<MeasureScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text('Várható zárás:', style: TextStyle(fontSize: 11, color: Color(0xFF1B5E20))),
-                            Text(_formatDateTime(endTime), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1B5E20))),
+                            const Text('Várható zárás:', style: TextStyle(fontSize: 10, color: Color(0xFF1B5E20))),
+                            Text(_formatDateTime(endTime), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF1B5E20))),
                           ],
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                Row(
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
                   children: [
                     OutlinedButton.icon(
                       onPressed: _setStartTimeNow,
-                      icon: const Icon(Icons.access_time, size: 16),
-                      label: const Text('Kezdés: Most', style: TextStyle(fontSize: 12)),
+                      icon: const Icon(Icons.access_time, size: 15),
+                      label: const Text('Kezdés: Most', style: TextStyle(fontSize: 11)),
                     ),
-                    const SizedBox(width: 8),
                     OutlinedButton.icon(
                       onPressed: _pickStartTime,
-                      icon: const Icon(Icons.calendar_month, size: 16),
-                      label: const Text('Egyéni időpont', style: TextStyle(fontSize: 12)),
+                      icon: const Icon(Icons.calendar_month, size: 15),
+                      label: const Text('Egyéni időpont', style: TextStyle(fontSize: 11)),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
                       child: TextField(
                         controller: _durCtrl,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(labelText: 'Időtartam [h]', border: OutlineInputBorder()),
+                        decoration: const InputDecoration(labelText: 'Időtartam [h]', isDense: true, border: OutlineInputBorder()),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -849,61 +854,78 @@ class _MeasureScreenState extends State<MeasureScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Mintavételi napló (${_grid.length} pont)', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Mintavételi napló (${_grid.length} pont)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                     ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1565C0),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      ),
                       onPressed: saveMeasurementProgress,
-                      icon: const Icon(Icons.save_as, size: 16),
-                      label: const Text('Részleges mentés', style: TextStyle(fontSize: 12)),
+                      icon: const Icon(Icons.save_as, size: 15),
+                      label: const Text('Részleges mentés', style: TextStyle(fontSize: 11)),
                     )
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 ..._grid.map((row) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Row(
                         children: [
                           SizedBox(
-                            width: 100,
+                            width: 78,
                             child: Text(
                               row['label'],
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 10),
                             ),
                           ),
+                          const SizedBox(width: 4),
                           Expanded(
+                            flex: 5,
                             child: TextField(
                               controller: row['p'],
                               onChanged: (_) => _saveProgressQuietly(),
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(hintText: 'p [mbar]', isDense: true, border: OutlineInputBorder()),
+                              decoration: const InputDecoration(
+                                hintText: 'p [mbar]',
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                border: OutlineInputBorder(),
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 4),
                           Expanded(
+                            flex: 5,
                             child: TextField(
                               controller: row['t'],
                               onChanged: (_) => _saveProgressQuietly(),
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(hintText: 'T [°C]', isDense: true, border: OutlineInputBorder()),
+                              decoration: const InputDecoration(
+                                hintText: 'T [°C]',
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                border: OutlineInputBorder(),
+                              ),
                             ),
                           ),
                         ],
                       ),
                     )),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
-                  height: 48,
+                  height: 44,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2E7D32), foregroundColor: Colors.white),
                     onPressed: _evaluate,
@@ -915,22 +937,22 @@ class _MeasureScreenState extends State<MeasureScreen> {
           ),
         ),
         if (_evalResult != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Card(
             color: const Color(0xFFE8F5E9),
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Mért tartomány: ${_evalResult!['range']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
+                  Text('Mért tartomány: ${_evalResult!['range']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  const SizedBox(height: 4),
                   Text('Mért qL: ${_evalResult!['qL']} mbar·l/s',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20))),
-                  const SizedBox(height: 6),
-                  Text('Hőmérséklet-korrigált valós emelkedés: ${_evalResult!['dpEff']} mbar'),
-                  Text('Termikus látszólagos hatás: ${_evalResult!['dpThermal']} mbar'),
-                  Text('Ekvivalens átmenő furatátmérő: ~${_evalResult!['dMm']} mm'),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1B5E20))),
+                  const SizedBox(height: 4),
+                  Text('Hőmérséklet-korrigált valós emelkedés: ${_evalResult!['dpEff']} mbar', style: const TextStyle(fontSize: 12)),
+                  Text('Termikus látszólagos hatás: ${_evalResult!['dpThermal']} mbar', style: const TextStyle(fontSize: 12)),
+                  Text('Ekvivalens átmenő furatátmérő: ~${_evalResult!['dMm']} mm', style: const TextStyle(fontSize: 12)),
                 ],
               ),
             ),
@@ -983,12 +1005,12 @@ class _SavedListScreenState extends State<SavedListScreen> {
       return const Center(child: Text('Nincsenek mentett hőcserélők a telefonon.'));
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       itemCount: _items.length,
       itemBuilder: (context, i) {
         final it = _items[i];
         return Card(
-          margin: const EdgeInsets.only(bottom: 10),
+          margin: const EdgeInsets.only(bottom: 8),
           child: ListTile(
             title: Text(it['pos'], style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1565C0))),
             subtitle: Text('${it['v']} L | ${it['med']} | ${it['gauge']}\n${it['res']} (${it['date']})'),
