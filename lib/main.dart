@@ -139,7 +139,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // -------------------------------------------------------------
-// 1. FÜL: ELŐKALKULÁCIÓ (PERZISZTENS TÁROLÁSSAL)
+// 1. FÜL: ELŐKALKULÁCIÓ
 // -------------------------------------------------------------
 class CalcScreen extends StatefulWidget {
   final VoidCallback onSaved;
@@ -510,7 +510,7 @@ class _CalcScreenState extends State<CalcScreen> {
 }
 
 // -------------------------------------------------------------
-// 2. FÜL: MÉRÉS VÉGZÉSE (RÉSZLEGES / FOLYAMATOS MENTÉSSEL)
+// 2. FÜL: MÉRÉS VÉGZÉSE (PONTOS KEZDÉSI/BEFEJEZÉSI IDŐVEL ÉS MINTAVÉTELI ÓRÁKKAL)
 // -------------------------------------------------------------
 class MeasureScreen extends StatefulWidget {
   final String pos;
@@ -532,6 +532,7 @@ class MeasureScreen extends StatefulWidget {
 
 class _MeasureScreenState extends State<MeasureScreen> {
   final _durCtrl = TextEditingController(text: '24');
+  DateTime _startTime = DateTime.now();
   List<Map<String, dynamic>> _grid = [];
   Map<String, dynamic>? _evalResult;
 
@@ -539,6 +540,14 @@ class _MeasureScreenState extends State<MeasureScreen> {
   void initState() {
     super.initState();
     _loadOrCreateActiveMeasurement();
+  }
+
+  String _formatDateTime(DateTime dt) {
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    final h = dt.hour.toString().padLeft(2, '0');
+    final min = dt.minute.toString().padLeft(2, '0');
+    return '$m.$d. $h:$min';
   }
 
   Future<void> _loadOrCreateActiveMeasurement() async {
@@ -549,10 +558,14 @@ class _MeasureScreenState extends State<MeasureScreen> {
       final data = jsonDecode(savedJson);
       if (data['pos'] == widget.pos) {
         _durCtrl.text = data['duration'] ?? '24';
+        if (data['startTime'] != null) {
+          _startTime = DateTime.tryParse(data['startTime']) ?? DateTime.now();
+        }
         final List<dynamic> rows = data['rows'] ?? [];
         setState(() {
           _grid = rows.map((r) => {
             'label': r['label'],
+            'targetTime': r['targetTime'] ?? '',
             'p': TextEditingController(text: r['p']),
             't': TextEditingController(text: r['t']),
           }).toList();
@@ -575,8 +588,15 @@ class _MeasureScreenState extends State<MeasureScreen> {
     _grid = List.generate(count, (i) {
       double currentH = i * step;
       if (currentH > hours) currentH = hours;
+
+      final targetDate = _startTime.add(Duration(minutes: (currentH * 60).round()));
+      final timeStr = _formatDateTime(targetDate);
+
+      String stage = i == 0 ? 'Kezdet' : (i == count - 1 ? 'Záró' : '${currentH}h');
+
       return {
-        'label': i == 0 ? '0. óra (Kezdet)' : (i == count - 1 ? '${currentH}h (Záró)' : '${currentH}h'),
+        'label': '$timeStr\n($stage)',
+        'targetTime': timeStr,
         'p': TextEditingController(),
         't': TextEditingController(),
       };
@@ -585,10 +605,40 @@ class _MeasureScreenState extends State<MeasureScreen> {
     _saveProgressQuietly();
   }
 
+  Future<void> _pickStartTime() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _startTime,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (date == null) return;
+
+    if (!mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_startTime),
+    );
+    if (time == null) return;
+
+    setState(() {
+      _startTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    });
+    _generateGrid();
+  }
+
+  void _setStartTimeNow() {
+    setState(() {
+      _startTime = DateTime.now();
+    });
+    _generateGrid();
+  }
+
   Future<void> _saveProgressQuietly() async {
     final prefs = await SharedPreferences.getInstance();
     final rowsData = _grid.map((r) => {
       'label': r['label'],
+      'targetTime': r['targetTime'],
       'p': r['p'].text,
       't': r['t'].text,
     }).toList();
@@ -598,6 +648,7 @@ class _MeasureScreenState extends State<MeasureScreen> {
       'volume': widget.volume,
       'gauge': widget.gauge,
       'duration': _durCtrl.text.trim(),
+      'startTime': _startTime.toIso8601String(),
       'rows': rowsData,
     }));
   }
@@ -607,7 +658,7 @@ class _MeasureScreenState extends State<MeasureScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Aktuális pontok és értékek mentve! Kilépés után sem veszik el.'),
+          content: Text('Aktuális pontok és időbélyegek elmentve!'),
           backgroundColor: Colors.blue,
         ),
       );
@@ -617,10 +668,11 @@ class _MeasureScreenState extends State<MeasureScreen> {
   Future<void> _resetMeasurement() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('active_measurement');
+    _startTime = DateTime.now();
     _generateGrid();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mérési adatok nullázva!')),
+        const SnackBar(content: Text('Mérési adatok és időpontok alaphelyzetbe állítva!')),
       );
     }
   }
@@ -628,7 +680,6 @@ class _MeasureScreenState extends State<MeasureScreen> {
   void _evaluate() {
     _saveProgressQuietly();
 
-    // Keresd meg a legelső kitöltött sort
     Map<String, dynamic>? firstFilled;
     for (var r in _grid) {
       if (r['p'].text.isNotEmpty && r['t'].text.isNotEmpty) {
@@ -637,7 +688,6 @@ class _MeasureScreenState extends State<MeasureScreen> {
       }
     }
 
-    // Keresd meg a legutolsó kitöltött sort
     Map<String, dynamic>? lastFilled;
     for (var r in _grid.reversed) {
       if (r['p'].text.isNotEmpty && r['t'].text.isNotEmpty) {
@@ -689,13 +739,16 @@ class _MeasureScreenState extends State<MeasureScreen> {
         'dpEff': dpEffective.toStringAsFixed(2),
         'dpRaw': (p2 - p1).toStringAsFixed(2),
         'dpThermal': (dpThermal > 0 ? '+$dpThermal' : dpThermal.toStringAsFixed(2)),
-        'range': '${firstFilled!['label']} ➔ ${lastFilled!['label']}',
+        'range': '${firstFilled!['targetTime']} ➔ ${lastFilled!['targetTime']}',
       };
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final hours = double.tryParse(_durCtrl.text.trim()) ?? 24.0;
+    final endTime = _startTime.add(Duration(minutes: (hours * 60).round()));
+
     return ListView(
       padding: const EdgeInsets.all(14),
       children: [
@@ -718,17 +771,80 @@ class _MeasureScreenState extends State<MeasureScreen> {
         Card(
           child: Padding(
             padding: const EdgeInsets.all(14),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _durCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Időtartam [h]', border: OutlineInputBorder()),
-                  ),
+                const Text('Mérési időkeret és ütemezés', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.black12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Kezdés:', style: TextStyle(fontSize: 11, color: Colors.black54)),
+                            Text(_formatDateTime(_startTime), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFA5D6A7)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Várható zárás:', style: TextStyle(fontSize: 11, color: Color(0xFF1B5E20))),
+                            Text(_formatDateTime(endTime), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1B5E20))),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                ElevatedButton(onPressed: _generateGrid, child: const Text('Rács újra')),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _setStartTimeNow,
+                      icon: const Icon(Icons.access_time, size: 16),
+                      label: const Text('Kezdés: Most', style: TextStyle(fontSize: 12)),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: _pickStartTime,
+                      icon: const Icon(Icons.calendar_month, size: 16),
+                      label: const Text('Egyéni időpont', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _durCtrl,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Időtartam [h]', border: OutlineInputBorder()),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(onPressed: _generateGrid, child: const Text('Ütemezés')),
+                  ],
+                ),
               ],
             ),
           ),
@@ -743,7 +859,7 @@ class _MeasureScreenState extends State<MeasureScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Mérési napló (${_grid.length} pont)', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Mintavételi napló (${_grid.length} pont)', style: const TextStyle(fontWeight: FontWeight.bold)),
                     ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1565C0), foregroundColor: Colors.white),
                       onPressed: saveMeasurementProgress,
@@ -757,7 +873,13 @@ class _MeasureScreenState extends State<MeasureScreen> {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: Row(
                         children: [
-                          SizedBox(width: 80, child: Text(row['label'], style: const TextStyle(fontWeight: FontWeight.w600))),
+                          SizedBox(
+                            width: 100,
+                            child: Text(
+                              row['label'],
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+                            ),
+                          ),
                           Expanded(
                             child: TextField(
                               controller: row['p'],
@@ -820,7 +942,7 @@ class _MeasureScreenState extends State<MeasureScreen> {
 }
 
 // -------------------------------------------------------------
-// 3. FÜL: MENTETT HŐCSERÉLŐK (FLASHRŐL BETÖLTVE)
+// 3. FÜL: MENTETT HŐCSERÉLŐK
 // -------------------------------------------------------------
 class SavedListScreen extends StatefulWidget {
   final Function(String pos, double v, String gauge) onMeasureRequested;
