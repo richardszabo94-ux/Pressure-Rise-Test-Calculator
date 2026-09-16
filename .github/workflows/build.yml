@@ -23,16 +23,17 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Build Project from Scratch
+      - name: Build Project and Generate Adaptive Icons
         run: |
-          # 1. Hozunk létre egy tiszta, natív Androidos Flutter projektet
+          # 1. Teljes tiszta Flutter projekt létrehozása
           flutter create --org com.ndt --project-name pressure_rise_calc app_build
           cd app_build
 
-          # 2. Másoljuk be a fő alkalmazáskódot a repository-ból
+          # 2. Forráskód és manifest bemásolása
           cp ../lib/main.dart lib/main.dart
+          cp ../pubspec.yaml pubspec.yaml
 
-          # 3. Ikonok előkészítése és generálása
+          # 3. Ikonok generálása az összes Android verzióra
           if [ -f "../app_icon.png" ]; then
             cp ../app_icon.png app_icon.png
             flutter pub add flutter_launcher_icons --dev
@@ -42,14 +43,17 @@ jobs:
             ios: false
             image_path: "app_icon.png"
             min_sdk_android: 21
+            adaptive_icon_background: "#1565c0"
+            adaptive_icon_foreground: "app_icon.png"
           EOF
             dart run flutter_launcher_icons
           fi
 
-          # 4. APK fordítása
+          # 4. Függőségek letöltése és build
+          flutter pub get
           flutter build apk --debug
 
-          # 5. Kész APK kimásolása
+          # 5. Fájl előkészítése letöltésre
           mkdir -p ../output
           cp build/app/outputs/flutter-apk/app-debug.apk ../output/PressureRiseCalc.apk
 
