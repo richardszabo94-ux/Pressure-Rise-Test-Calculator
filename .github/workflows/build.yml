@@ -23,39 +23,43 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Assemble & Inject Launcher Icon
+      - name: Install ImageMagick (Icon Resizer)
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
+
+      - name: Assemble Native Project & Replace Icons
         run: |
-          # 1. Tiszta Android projekt inicializálása
+          # 1. Tiszta Flutter projekt létrehozása
           flutter create --org com.ndt --project-name pressure_rise_calc app_build
           cd app_build
 
-          # 2. Forráskód és beállítások átvitele
+          # 2. Forráskód és manifest bemásolása
           cp ../lib/main.dart lib/main.dart
           cp ../pubspec.yaml pubspec.yaml
 
-          # 3. Kép bemásolása és a hivatalos launcher ikon generálás
+          # 3. KÖZVETLEN IKON BEÉGETÉS A NATÍV ANDROID MAPPÁKBA
           if [ -f "../app_icon.png" ]; then
-            cp ../app_icon.png assets_icon.png
-            flutter pub add flutter_launcher_icons --dev
-            cat << 'EOF' > flutter_launcher_icons.yaml
-          flutter_launcher_icons:
-            android: true
-            ios: false
-            image_path: "assets_icon.png"
-            min_sdk_android: 21
-            adaptive_icon_background: "#1565C0"
-            adaptive_icon_foreground: "assets_icon.png"
-          EOF
-            dart run flutter_launcher_icons
+            echo "Egyedi ikon konvertálása az összes natív méretre..."
+            
+            # Töröljük a Flutter alapértelmezett adaptív XML-jét, ami a kék madarat kényszeríti ki
+            rm -rf android/app/src/main/res/mipmap-anydpi-v26
+
+            # Méretezés az összes hivatalos Android felbontásra:
+            convert ../app_icon.png -resize 48x48   android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+            convert ../app_icon.png -resize 72x72   android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+            convert ../app_icon.png -resize 96x96   android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+            convert ../app_icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+            convert ../app_icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           fi
 
-          # 4. Függőségek és Debug APK fordítás
+          # 4. Függőségek letöltése
           flutter pub get
-          flutter build apk --debug
 
-          # 5. Csomagolás exportálásra
+          # 5. RELEASE APK fordítás (Nem debug! Így ~18 MB lesz a 153 MB helyett)
+          flutter build apk --release
+
+          # 6. Kész APK kimásolása
           mkdir -p ../output
-          cp build/app/outputs/flutter-apk/app-debug.apk ../output/PressureRiseCalc.apk
+          cp build/app/outputs/flutter-apk/app-release.apk ../output/PressureRiseCalc.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
