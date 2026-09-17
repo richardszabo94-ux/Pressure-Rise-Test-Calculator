@@ -87,21 +87,27 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     final List<BottomNavigationBarItem> navItems = [
-      const BottomNavigationBarItem(icon: Icon(Icons.calculate), label: 'Előkalkuláció'),
+      const BottomNavigationBarItem(icon: Icon(Icons.calculate), label: 'Kalkuláció'),
       const BottomNavigationBarItem(icon: Icon(Icons.folder), label: 'Hőcserélők'),
       if (_isMeasureTabVisible)
-        const BottomNavigationBarItem(icon: Icon(Icons.timer), label: 'Mérés végzése'),
+        const BottomNavigationBarItem(icon: Icon(Icons.timer), label: 'Mérés'),
+      const BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Módszertan'),
     ];
+
+    int infoIndex = _isMeasureTabVisible ? 3 : 2;
+
+    String getTitle() {
+      if (_currentIndex == 0) return 'Előkalkuláció';
+      if (_currentIndex == 1) return 'Mentett hőcserélők';
+      if (_isMeasureTabVisible && _currentIndex == 2) return 'Mérés: $_measPos';
+      return 'Számítási módszertan és képletek';
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _currentIndex == 0
-              ? 'Előkalkuláció'
-              : _currentIndex == 1
-                  ? 'Mentett hőcserélők'
-                  : 'Mérés: $_measPos',
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          getTitle(),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
         ),
         backgroundColor: const Color(0xFF1565C0),
         foregroundColor: Colors.white,
@@ -121,10 +127,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             )
           else
             const SizedBox.shrink(),
+          const InfoScreen(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
+        type: BottomNavigationBarType.fixed,
         onTap: (index) {
           setState(() => _currentIndex = index);
           if (index == 1) {
@@ -139,7 +147,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 }
 
 // -------------------------------------------------------------
-// 1. FÜL: ELŐKALKULÁCIÓ (3 MÓD: KÖZEG / ADOTT IDŐ / HIBAMÉRET)
+// 1. FÜL: ELŐKALKULÁCIÓ
 // -------------------------------------------------------------
 class CalcScreen extends StatefulWidget {
   final VoidCallback onSaved;
@@ -510,7 +518,7 @@ class _CalcScreenState extends State<CalcScreen> {
 }
 
 // -------------------------------------------------------------
-// 2. FÜL: MÉRÉS VÉGZÉSE (TÚLCSORDULÁSMENTES ÉS RUGALMAS ILLESZTÉSSEL)
+// 2. FÜL: MÉRÉS VÉGZÉSE
 // -------------------------------------------------------------
 class MeasureScreen extends StatefulWidget {
   final String pos;
@@ -1032,6 +1040,105 @@ class _SavedListScreenState extends State<SavedListScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+// -------------------------------------------------------------
+// 4. FÜL: SZÁMÍTÁSI MÓDSZERTAN ÉS KÉPLETEK (ÚJ!)
+// -------------------------------------------------------------
+class InfoScreen extends StatelessWidget {
+  const InfoScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        _buildInfoCard(
+          title: '1. Alapvető gáztörvény és szivárgási ráta',
+          formula: 'qL = (V · Δp) / t',
+          explanation: 'Ahol:\n'
+              '• qL: Szivárgási ráta [mbar·l/s]\n'
+              '• V: Köpenytérfogat [liter]\n'
+              '• Δp: Észlelt valós nyomásnövekedés [mbar]\n'
+              '• t: Mérési időtartam másodpercben [s]\n\n'
+              'A kalkuláció a megengedett szivárgásból és a műszer felbontásából (küszöbérték) határozza meg a szükséges időt: t = (V · Δp) / qL',
+        ),
+        const SizedBox(height: 10),
+        _buildInfoCard(
+          title: '2. Légköri hajtóerő korrekció (Driving Factor)',
+          formula: 'f_hajtó = (p_atm - p_vac) / p_atm',
+          explanation: 'Ahol:\n'
+              '• p_atm: Standard légköri nyomás (1013.25 mbar)\n'
+              '• p_vac: Létrehozott belső vákuumszint [mbar]\n\n'
+              'Ha a rendszerben csak enyhe vákuum van (pl. 500 mbar), a légkör jóval kisebb hajtóerővel nyomja be a gázt a kapillárisokon keresztül. Az app a valós hajtóerővel korrigálja az elvárt szivárgási sebességet: qL,eff = qL,req · f_hajtó',
+        ),
+        const SizedBox(height: 10),
+        _buildInfoCard(
+          title: '3. Leybold tömörségi referencia határértékek',
+          formula: 'Víz: 10⁻² | Gőz: 10⁻³ | Olaj: 10⁻⁵ mbar·l/s',
+          explanation: 'A szabványos Leybold vákuumtechnikai osztályozás alapján:\n'
+              '• Víztömör (Water-tight): qL < 0.01 mbar·l/s (Víz, glikol, hűtött víz)\n'
+              '• Gőztömör (Vapor-tight): qL < 0.001 mbar·l/s (Vízgőz közegek)\n'
+              '• Olajtömör (Oil-tight): qL < 0.00001 mbar·l/s (Termálolaj, nehézolaj)',
+        ),
+        const SizedBox(height: 10),
+        _buildInfoCard(
+          title: '4. Ekvivalens hibaméret (Furatátmérő)',
+          formula: 'd = 0.1 · √(qL / 0.133)   [mm]',
+          explanation: 'A Leybold referencia szerint egy 0.1 mm átmérőjű kör keresztmetszetű átmenő hiba légköri nyomáskülönbségnél ~0.133 mbar·l/s szivárgást okoz.\n\n'
+              'Ebből visszafelé számítva a mért qL-ből meghatározható a geometriai hiba nagysága, illetve fordítva: egy elvárt d_cél hibamérethez kiszámítható a szükséges tesztidő: qL = 0.133 · (d / 0.1)²',
+        ),
+        const SizedBox(height: 10),
+        _buildInfoCard(
+          title: '5. Gay-Lussac termikus korrekció',
+          formula: 'p2,korr = p2 · (T1 / T2)\nΔp_eff = p2,korr - p1',
+          explanation: 'A gáztörvény (p/T = állandó) alapján zárt térben a hőmérséklet változása közvetlen nyomásváltozást kelt (Kelvinben számolva: T = t + 273.15).\n\n'
+              '• Ha a hőmérséklet emelkedik, a gáz kitágul, és látszólagos szivárgást mutat.\n'
+              '• A Gay-Lussac korrekció kivonja ezt a látszólagos termikus emelkedést, így csak a valós anyaghiányból eredő nyomásnövekedést értékeli ki.',
+        ),
+        const SizedBox(height: 10),
+        _buildInfoCard(
+          title: '6. Inkubációs (felületi deszorpciós) idő',
+          formula: 'V < 10m³: ~2h | V < 25m³: ~4h | V > 25m³: ~6h',
+          explanation: 'A vákuum leszakítása után a fémfalak mikroszkopikus pórusaiból megindul a felületi nedvesség és gázok deszorpciója (kipárolgása). Ez az első órákban fals meredek nyomásemelkedést okoz. A hivatalos jegyzőkönyvezett mérést csak az inkubációs idő lejárta után szabad megkezdeni.',
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  Widget _buildInfoCard({required String title, required String formula, required String explanation}) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1565C0))),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE3F2FD),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFF90CAF9)),
+              ),
+              child: Text(
+                formula,
+                style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0D47A1)),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              explanation,
+              style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.45),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
