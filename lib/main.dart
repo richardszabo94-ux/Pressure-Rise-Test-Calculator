@@ -86,6 +86,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final List<Widget> pages = [
+      CalcScreen(onSaved: () => _savedListKey.currentState?.reload()),
+      SavedListScreen(key: _savedListKey, onMeasureRequested: _openMeasureTab),
+      if (_isMeasureTabVisible)
+        MeasureScreen(
+          key: _measureScreenKey,
+          pos: _measPos,
+          volume: _measVolume,
+          gauge: _measGauge,
+          onClose: _hideMeasureTab,
+        ),
+      const InfoScreen(),
+    ];
+
     final List<BottomNavigationBarItem> navItems = [
       const BottomNavigationBarItem(icon: Icon(Icons.calculate), label: 'Kalkuláció'),
       const BottomNavigationBarItem(icon: Icon(Icons.folder), label: 'Hőcserélők'),
@@ -94,7 +108,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       const BottomNavigationBarItem(icon: Icon(Icons.menu_book), label: 'Módszertan'),
     ];
 
-    int infoIndex = _isMeasureTabVisible ? 3 : 2;
+    if (_currentIndex >= pages.length) {
+      _currentIndex = pages.length - 1;
+    }
 
     String getTitle() {
       if (_currentIndex == 0) return 'Előkalkuláció';
@@ -114,21 +130,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ),
       body: IndexedStack(
         index: _currentIndex,
-        children: [
-          CalcScreen(onSaved: () => _savedListKey.currentState?.reload()),
-          SavedListScreen(key: _savedListKey, onMeasureRequested: _openMeasureTab),
-          if (_isMeasureTabVisible)
-            MeasureScreen(
-              key: _measureScreenKey,
-              pos: _measPos,
-              volume: _measVolume,
-              gauge: _measGauge,
-              onClose: _hideMeasureTab,
-            )
-          else
-            const SizedBox.shrink(),
-          const InfoScreen(),
-        ],
+        children: pages,
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
@@ -1045,7 +1047,7 @@ class _SavedListScreenState extends State<SavedListScreen> {
 }
 
 // -------------------------------------------------------------
-// 4. FÜL: SZÁMÍTÁSI MÓDSZERTAN ÉS KÉPLETEK (ÚJ!)
+// 4. FÜL: SZÁMÍTÁSI MÓDSZERTAN ÉS KÉPLETEK (MÉRNÖKI HÁTTÉRREL)
 // -------------------------------------------------------------
 class InfoScreen extends StatelessWidget {
   const InfoScreen({super.key});
@@ -1072,11 +1074,21 @@ class InfoScreen extends StatelessWidget {
           explanation: 'Ahol:\n'
               '• p_atm: Standard légköri nyomás (1013.25 mbar)\n'
               '• p_vac: Létrehozott belső vákuumszint [mbar]\n\n'
-              'Ha a rendszerben csak enyhe vákuum van (pl. 500 mbar), a légkör jóval kisebb hajtóerővel nyomja be a gázt a kapillárisokon keresztül. Az app a valós hajtóerővel korrigálja az elvárt szivárgási sebességet: qL,eff = qL,req · f_hajtó',
+              'A valós vákuumszint figyelembevételével a kalkuláció az effektív szivárgási sebességgel számol:\n'
+              'qL,eff = qL,req · f_hajtó',
         ),
         const SizedBox(height: 10),
         _buildInfoCard(
-          title: '3. Leybold tömörségi referencia határértékek',
+          title: '3. Áramlási rezsimek és a modell konzervatív jellege',
+          formula: 'Biztonsági döntés: Lineáris modell alkalmazása',
+          explanation: 'A valós szivárgási csatorna geometriája a terepen ismeretlen:\n\n'
+              '• Fojtott (szonikus) áramlás: Szűk lyuknál levegő esetén a kritikus nyomásviszony ~0.528. Ha a belső nyomás < 535 mbar, az áramlás eléri a hangsebességet, a tömegáram konstanssá válik (f = 1.0).\n\n'
+              '• Hosszú mikrokapilláris (Poiseuille): Hegesztési varrathiba esetén a lamináris áramlás hajtóereje a nyomások négyzetével arányos: f ~ (p_atm² - p_vac²) / p_atm².\n\n'
+              '• Miért a lineáris modellt használjuk? Sekély vákuumnál (400–800 mbar) a lineáris arányosítás alulbecsüli a hajtóerőt, így HOSSZABB mérési időt ír elő. Ez a minőségbiztosításban a BIZTONSÁGOS (konzervatív) oldal: megakadályozza a szivárgó berendezések téves megfelelőségi (False-Pass) átadását.',
+        ),
+        const SizedBox(height: 10),
+        _buildInfoCard(
+          title: '4. Leybold tömörségi referencia határértékek',
           formula: 'Víz: 10⁻² | Gőz: 10⁻³ | Olaj: 10⁻⁵ mbar·l/s',
           explanation: 'A szabványos Leybold vákuumtechnikai osztályozás alapján:\n'
               '• Víztömör (Water-tight): qL < 0.01 mbar·l/s (Víz, glikol, hűtött víz)\n'
@@ -1085,14 +1097,14 @@ class InfoScreen extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         _buildInfoCard(
-          title: '4. Ekvivalens hibaméret (Furatátmérő)',
+          title: '5. Ekvivalens hibaméret (Furatátmérő)',
           formula: 'd = 0.1 · √(qL / 0.133)   [mm]',
           explanation: 'A Leybold referencia szerint egy 0.1 mm átmérőjű kör keresztmetszetű átmenő hiba légköri nyomáskülönbségnél ~0.133 mbar·l/s szivárgást okoz.\n\n'
               'Ebből visszafelé számítva a mért qL-ből meghatározható a geometriai hiba nagysága, illetve fordítva: egy elvárt d_cél hibamérethez kiszámítható a szükséges tesztidő: qL = 0.133 · (d / 0.1)²',
         ),
         const SizedBox(height: 10),
         _buildInfoCard(
-          title: '5. Gay-Lussac termikus korrekció',
+          title: '6. Gay-Lussac termikus korrekció',
           formula: 'p2,korr = p2 · (T1 / T2)\nΔp_eff = p2,korr - p1',
           explanation: 'A gáztörvény (p/T = állandó) alapján zárt térben a hőmérséklet változása közvetlen nyomásváltozást kelt (Kelvinben számolva: T = t + 273.15).\n\n'
               '• Ha a hőmérséklet emelkedik, a gáz kitágul, és látszólagos szivárgást mutat.\n'
@@ -1100,7 +1112,7 @@ class InfoScreen extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         _buildInfoCard(
-          title: '6. Inkubációs (felületi deszorpciós) idő',
+          title: '7. Inkubációs (felületi deszorpciós) idő',
           formula: 'V < 10m³: ~2h | V < 25m³: ~4h | V > 25m³: ~6h',
           explanation: 'A vákuum leszakítása után a fémfalak mikroszkopikus pórusaiból megindul a felületi nedvesség és gázok deszorpciója (kipárolgása). Ez az első órákban fals meredek nyomásemelkedést okoz. A hivatalos jegyzőkönyvezett mérést csak az inkubációs idő lejárta után szabad megkezdeni.',
         ),
@@ -1128,7 +1140,7 @@ class InfoScreen extends StatelessWidget {
               ),
               child: Text(
                 formula,
-                style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF0D47A1)),
+                style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF0D47A1)),
               ),
             ),
             const SizedBox(height: 8),
