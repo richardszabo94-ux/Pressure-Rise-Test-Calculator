@@ -32,32 +32,46 @@ jobs:
           flutter create --org com.ndt --project-name pressure_rise_calc app_build
           cd app_build
 
-          # 2. Forráskód és manifest bemásolása
+          # 2. Alkalmazás nevének átírása a telefon kezdőképernyőjéhez
+          sed -i 's/android:label="pressure_rise_calc"/android:label="Kalkulátor - Nyomásváltásos"/' android/app/src/main/AndroidManifest.xml
+
+          # 3. Forráskód és beállítások bemásolása
           cp ../lib/main.dart lib/main.dart
           cp ../pubspec.yaml pubspec.yaml
 
-          # 3. KÖZVETLEN IKON BEÉGETÉS A NATÍV ANDROID MAPPÁKBA
-          if [ -f "../app_icon.png" ]; then
-            echo "Egyedi ikon konvertálása az összes natív méretre..."
+          # 4. Képfájl megkeresése (akár icon.png, akár app_icon.png)
+          ICON_FILE=""
+          if [ -f "../icon.png" ]; then
+            ICON_FILE="../icon.png"
+          elif [ -f "../app_icon.png" ]; then
+            ICON_FILE="../app_icon.png"
+          fi
+
+          # 5. KÖZVETLEN IKON BEÉGETÉS (sima és kerekített formában is)
+          if [ -n "$ICON_FILE" ]; then
+            echo "Egyedi ikon megtalálva ($ICON_FILE), konvertálás indul..."
             
-            # Töröljük a Flutter alapértelmezett adaptív XML-jét, ami a kék madarat kényszeríti ki
+            # Töröljük a Flutter alapértelmezett adaptív XML-jét, ami a kék madarat kényszerítené ki
             rm -rf android/app/src/main/res/mipmap-anydpi-v26
 
             # Méretezés az összes hivatalos Android felbontásra:
-            convert ../app_icon.png -resize 48x48   android/app/src/main/res/mipmap-mdpi/ic_launcher.png
-            convert ../app_icon.png -resize 72x72   android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-            convert ../app_icon.png -resize 96x96   android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-            convert ../app_icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-            convert ../app_icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+            for res in "mdpi:48" "hdpi:72" "xhdpi:96" "xxhdpi:144" "xxxhdpi:192"; do
+              folder="android/app/src/main/res/mipmap-${res%%:*}"
+              size="${res##*:}"
+              convert "$ICON_FILE" -resize ${size}x${size} "$folder/ic_launcher.png"
+              convert "$ICON_FILE" -resize ${size}x${size} "$folder/ic_launcher_round.png"
+            done
+          else
+            echo "FIGYELEM: Nem található icon.png vagy app_icon.png a gyökérkönyvtárban!"
           fi
 
-          # 4. Függőségek letöltése
+          # 6. Függőségek letöltése
           flutter pub get
 
-          # 5. RELEASE APK fordítás (Nem debug! Így ~18 MB lesz a 153 MB helyett)
+          # 7. RELEASE APK fordítás (~18 MB méret)
           flutter build apk --release
 
-          # 6. Kész APK kimásolása
+          # 8. Kész APK kimásolása
           mkdir -p ../output
           cp build/app/outputs/flutter-apk/app-release.apk ../output/PressureRiseCalc.apk
 
