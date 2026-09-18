@@ -14,7 +14,7 @@ class PressureRiseApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Pressure Rise Calculator',
+      title: 'Kalkulátor - Nyomásváltásos',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -113,7 +113,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
 
     String getTitle() {
-      if (_currentIndex == 0) return 'Előkalkuláció';
+      if (_currentIndex == 0) return 'Kalkulátor - Nyomásváltásos';
       if (_currentIndex == 1) return 'Mentett hőcserélők';
       if (_isMeasureTabVisible && _currentIndex == 2) return 'Mérés: $_measPos';
       return 'Számítási módszertan és képletek';
@@ -1047,7 +1047,7 @@ class _SavedListScreenState extends State<SavedListScreen> {
 }
 
 // -------------------------------------------------------------
-// 4. FÜL: SZÁMÍTÁSI MÓDSZERTAN ÉS KÉPLETEK (MÉRNÖKI HÁTTÉRREL)
+// 4. FÜL: SZÁMÍTÁSI MÓDSZERTAN ÉS KÉPLETEK
 // -------------------------------------------------------------
 class InfoScreen extends StatelessWidget {
   const InfoScreen({super.key});
@@ -1079,12 +1079,12 @@ class InfoScreen extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         _buildInfoCard(
-          title: '3. Áramlási rezsimek és a modell konzervatív jellege',
+          title: '3. Áramlási állapotok és a modell konzervatív jellege',
           formula: 'Biztonsági döntés: Lineáris modell alkalmazása',
-          explanation: 'A valós szivárgási csatorna geometriája a terepen ismeretlen:\n\n'
-              '• Fojtott (szonikus) áramlás: Szűk lyuknál levegő esetén a kritikus nyomásviszony ~0.528. Ha a belső nyomás < 535 mbar, az áramlás eléri a hangsebességet, a tömegáram konstanssá válik (f = 1.0).\n\n'
-              '• Hosszú mikrokapilláris (Poiseuille): Hegesztési varrathiba esetén a lamináris áramlás hajtóereje a nyomások négyzetével arányos: f ~ (p_atm² - p_vac²) / p_atm².\n\n'
-              '• Miért a lineáris modellt használjuk? Sekély vákuumnál (400–800 mbar) a lineáris arányosítás alulbecsüli a hajtóerőt, így HOSSZABB mérési időt ír elő. Ez a minőségbiztosításban a BIZTONSÁGOS (konzervatív) oldal: megakadályozza a szivárgó berendezések téves megfelelőségi (False-Pass) átadását.',
+          explanation: 'A valós szivárgási csatorna geometriája a terepen közvetlenül nem határozható meg:\n\n'
+              '• Fojtott (szonikus) áramlás: Szűk nyílásnál levegő esetén a kritikus nyomásviszony ~0.528. Ha a belső nyomás < 535 mbar, az áramlás eléri a hangsebességet, és a tömegáram állandóvá válik (f = 1.0).\n\n'
+              '• Hosszú mikrokapilláris (Poiseuille): Hegesztési varrathiba esetén a lamináris gázáramlás hajtóereje a nyomások négyzetével arányos: f ~ (p_atm² - p_vac²) / p_atm².\n\n'
+              '• Miért a lineáris modellt használjuk? Sekély vákuumnál (400–800 mbar) a lineáris arányosítás alulbecsüli a hajtóerőt, így HOSSZABB mérési időt ír elő. Ez a minőségbiztosításban a BIZTONSÁGOS (konzervatív) oldal: megakadályozza a szivárgó berendezések téves megfelelőségi (False-Pass) elfogadását.',
         ),
         const SizedBox(height: 10),
         _buildInfoCard(
